@@ -1,6 +1,10 @@
-// Spots service worker: precache the app shell, network-first for pages, cache-first for static files.
-const VERSION = "spots-v0.1.0";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png"];
+// Spots service worker: precache the app shell; network-first for code so updates show up immediately,
+// cache fallback when offline. API calls (Supabase) are never cached here – the app keeps its own data cache.
+const VERSION = "spots-v0.2.0";
+const SHELL = [
+  "./", "index.html", "styles.css", "app.js", "config.js", "lib/db.js", "lib/hours.js",
+  "vendor/supabase-2.118.0.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
+];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -16,18 +20,13 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== location.origin) return; // never cache API calls
-  if (req.mode === "navigate") {
-    e.respondWith(fetch(req).catch(() => caches.match("index.html")));
-    return;
-  }
+  if (req.method !== "GET" || url.origin !== location.origin) return;
   e.respondWith(
-    caches.match(req).then((hit) => {
-      const net = fetch(req).then((res) => {
-        if (res.ok) caches.open(VERSION).then((c) => c.put(req, res.clone()));
+    fetch(req)
+      .then((res) => {
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
         return res;
-      });
-      return hit || net;
-    })
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match("index.html")))
   );
 });
