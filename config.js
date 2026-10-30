@@ -4,6 +4,6 @@
 // NEVER put service-role, Google or Claude API keys here – those live in Supabase Edge Function secrets.
 window.SPOTS_CONFIG = {
   supabaseUrl: "",      // e.g. https://abcd1234.supabase.co
-  supabaseAnonKey: "",  // Project Settings → API → anon / publishable key
+  supabaseAnonKey: "sb_publishable_tQz3BgHJmmYab0uUm07JYw_iD7wvftX",  // Project Settings → API → anon / publishable key
   version: "0.1.0"
 };
