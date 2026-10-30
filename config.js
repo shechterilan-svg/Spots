@@ -1,0 +1,9 @@
+// Spots – public client config.
+// The Supabase "anon" (publishable) key is safe to ship in the browser:
+// access is enforced by Row Level Security on the database.
+// NEVER put service-role, Google or Claude API keys here – those live in Supabase Edge Function secrets.
+window.SPOTS_CONFIG = {
+  supabaseUrl: "",      // e.g. https://abcd1234.supabase.co
+  supabaseAnonKey: "",  // Project Settings → API → anon / publishable key
+  version: "0.1.0"
+};
