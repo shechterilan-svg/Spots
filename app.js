@@ -81,7 +81,8 @@ function renderSignIn(msg) {
 function renderNoAccess() {
   return `<div class="signin"><h2>אין לך גישה עדיין</h2>
     <p>החשבון ${esc(state.session?.user?.email)} לא הוזמן ל-Spots. בקש מאילן להוסיף אותך.</p>
-    <button class="btn ghost" data-action="signout">התנתקות</button></div>`;
+    <div class="row" style="justify-content:center"><button class="btn" data-action="switch">החלפת חשבון</button>
+    <button class="btn ghost" data-action="signout">התנתקות</button></div></div>`;
 }
 
 async function renderNow() {
@@ -217,7 +218,7 @@ async function renderEdit(id) {
 function renderSettings() {
   return head("הגדרות", "חברים, משפיענים שנעקבים וייצוא") +
     `<section class="card"><h3>חשבון</h3><p>${esc(state.session?.user?.email || "")} · ${isOwner() ? "בעלים" : "חבר"}</p>
-       <div class="row"><button class="btn ghost" data-action="refresh">רענון נתונים</button><button class="btn ghost" data-action="signout">התנתקות</button></div></section>` +
+       <div class="row"><button class="btn ghost" data-action="switch">החלפת חשבון</button><button class="btn ghost" data-action="refresh">רענון נתונים</button><button class="btn ghost" data-action="signout">התנתקות</button></div></section>` +
     `<section class="card"><h3>חיבור לשרת</h3><div id="conn" class="status">בודק…</div></section>` +
     (isOwner()
       ? ph("חברים", "הזמנת עד 10 חברים לפי כתובת Gmail.", "Must", "F-11") +
@@ -284,6 +285,7 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.toggle) { state.filters[t.dataset.toggle] = !state.filters[t.dataset.toggle]; render(); return; }
   const a = t.dataset.action;
   if (a === "signout") { await db.signOut(); state.session = null; state.member = null; location.hash = "#/now"; render(); }
+  if (a === "switch") { try { await db.switchAccount(); } catch (err) { state.authError = err.message; state.session = null; state.member = null; render(); } return; }
   if (a === "refresh") { await db.loadPlaces({ force: true }); render(); }
   if (a === "clear-filters") { Object.assign(state.filters, { type: "", city: "", cuisine: "", kosher: "", price: "", status: "", openNow: false }); render(); }
   if (a === "export") exportJson();
