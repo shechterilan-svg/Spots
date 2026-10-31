@@ -217,8 +217,13 @@ const TYPES = ["מסעדה", "בית קפה", "בר", "מאפייה", "אוכל 
 const STATUSES = ["רוצה לנסות", "ביקרתי", "אהבתי", "לא אהבתי", "נסגר"];
 const KOSHER = ["לא ידוע", "כשר", "לא כשר"];
 
-async function renderAdd() {
+async function renderAdd(arg) {
   if (!isOwner()) return renderRecommend();
+  const incoming = (String(arg || "").match(/https?:\/\/\S+/) || [""])[0] || (String(arg || "").match(/https?:\/[^/]\S+/) || [""])[0].replace(/^(https?:)\//, "$1//");
+  if (incoming && incoming !== state.handledIncoming) {
+    state.handledIncoming = incoming;
+    setTimeout(() => recognize(incoming), 0);
+  }
   const r = state.addResult;
   let banner = "";
   if (r) {
@@ -445,26 +450,28 @@ async function renderSettings() {
 
 // ----- iPhone Shortcut setup (F-03) -----
 function renderShortcutHelp() {
-  const endpoint = `${cfg.supabaseUrl}/functions/v1/resolve-place`;
+  const prefix = appUrl("#/add/");
   const step = (n, t, body) => `<li class="card"><span class="rank">${n}</span><div><h3>${t}</h3>${body}</div></li>`;
   const code = (v) => `<div class="keybox"><code dir="ltr">${esc(v)}</code><button class="btn ghost" data-action="copy" data-value="${esc(v)}">העתקה</button></div>`;
-  return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "קיצור דרך פעם אחת, ואחר כך כל ריל או פוסט נשמר בשתי לחיצות") +
+  return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "קיצור דרך עם פעולה אחת: פותח את Spots עם הקישור, ו-Spots מזהה את המקום") +
     `<ol class="steps">
-      ${step(1, "מפתח אישי", `<p>בהגדרות → ״קיצור דרך לאייפון״ → ״יצירת מפתח חדש״, והעתק אותו.</p>`)}
-      ${step(2, "קיצור חדש", `<p>באפליקציית <b>קיצורים</b> לוחצים +. בהגדרות הקיצור (סמל ⓘ) מסמנים <b>הצג בגיליון השיתוף</b>, ובסוגי הקלט משאירים רק <b>כתובות URL</b> ו<b>טקסט</b>. שם: <b>שמור ל-Spots</b>.</p>`)}
-      ${step(3, "פעולה: קבלת תוכן מכתובת URL", `<p>מוסיפים את הפעולה <b>קבל תוכן של כתובת URL</b> (Get Contents of URL) עם הכתובת:</p>${code(endpoint)}
-        <p>שיטה: <b>POST</b>. כותרות (Headers):</p>
-        <p><code dir="ltr">x-spots-key</code> = המפתח האישי</p><p><code dir="ltr">apikey</code> =</p>${code(cfg.supabaseAnonKey)}
-        <p>גוף הבקשה: <b>JSON</b>, עם שני שדות: <code dir="ltr">url</code> (טקסט) = <b>קלט קיצור הדרך</b>, ו-<code dir="ltr">save</code> (בוליאני) = <b>אמת</b>.</p>`)}
-      ${step(4, "הודעה", `<p>מוסיפים <b>קבל ערך מילון</b> (Get Dictionary Value) עבור המפתח <code dir="ltr">message</code>, ואחריו <b>הצג התראה</b> עם הערך.</p>`)}
-      ${step(5, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף → שמור ל-Spots</b>. אחרי כמה שניות תופיע הודעה: ״נשמר״, ״כבר ברשימה״ או ״נשמר בתיבת האישור״ כשהזיהוי לא בטוח.</p>`)}
-    </ol>`;
+      ${step(1, "קיצור חדש", `<p>באפליקציית <b>Shortcuts</b> לוחצים <b>+</b>. מקישים על השם למעלה ← <b>Rename</b> ← <b>שמור ל-Spots</b>.</p>`)}
+      ${step(2, "תפריט השיתוף", `<p>לוחצים על <b>ⓘ</b> בשורה התחתונה ← מפעילים <b>Show in Share Sheet</b> ← <b>Done</b>.</p>`)}
+      ${step(3, "פעולה אחת", `<p>בחיפוש למטה כותבים <b>Open URLs</b> ומוסיפים. מקישים על המילה הכחולה <b>URL</b> ומדביקים:</p>${code(prefix)}
+        <p>מיד אחרי הטקסט (בלי רווח), מעל המקלדת בוחרים את המשתנה <b>Shortcut Input</b>. זהו – הקיצור מוכן.</p>`)}
+      ${step(4, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח ומזהה את המקום, ואתה לוחץ ״הוספה לרשימה״.</p>`)}
+    </ol>
+    <details class="card"><summary>מתקדם: שמירה בלי לפתוח את Spots</summary>
+      <p class="status">דורש מפתח אישי (בהגדרות) ופעולת <b>Get Contents of URL</b> עם POST, כותרות <code dir="ltr">x-spots-key</code> ו-<code dir="ltr">apikey</code>, וגוף JSON עם <code dir="ltr">url</code> ו-<code dir="ltr">save=true</code>.</p>
+      ${code(`${cfg.supabaseUrl}/functions/v1/resolve-place`)}${code(cfg.supabaseAnonKey)}</details>`;
 }
 
 // ---------- router ----------
 function parse() {
   const [name, ...rest] = (location.hash.replace(/^#\/?/, "") || "now").split("/");
-  return { name: screens[name] ? name : "now", arg: rest.length ? decodeURIComponent(rest.join("/")) : "" };
+  let arg = rest.join("/");
+  try { arg = decodeURIComponent(arg); } catch {}
+  return { name: screens[name] ? name : "now", arg };
 }
 
 let renderSeq = 0;
@@ -548,7 +555,11 @@ async function recognize(raw) {
   const f = document.getElementById("link-form"); if (f) f.elements.url.value = url;
   document.querySelectorAll('[data-action="paste-link"], #link-form button').forEach((b) => (b.disabled = true));
   if (st) st.textContent = "מזהה את המקום… (עד 15 שניות)";
-  try { state.addResult = await db.resolveLink(url); recognizing = false; render(); }
+  try {
+    state.addResult = await db.resolveLink(url); recognizing = false;
+    if (location.hash.startsWith("#/add/")) history.replaceState(null, "", location.pathname + "#/add");
+    render();
+  }
   catch (err) {
     recognizing = false;
     if (st) st.textContent = `הזיהוי נכשל: ${err.message}`;
@@ -805,7 +816,7 @@ async function boot() {
   window.addEventListener("hashchange", () => {
     if (!state.session) sessionStorage.setItem(RETURN_KEY, location.hash);
     if (!location.hash.startsWith("#/settings")) state.newKey = null;
-    if (!location.hash.startsWith("#/add")) { state.addResult = null; state.addUrl = ""; }
+    if (!location.hash.startsWith("#/add")) { state.addResult = null; state.addUrl = ""; state.handledIncoming = null; }
     render(); window.scrollTo(0, 0);
   });
   render();
