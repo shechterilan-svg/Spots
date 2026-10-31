@@ -452,7 +452,7 @@ async function renderSettings() {
 }
 
 // ----- iPhone Shortcut setup (F-03) -----
-const shortcutPrefix = (key) => `${cfg.supabaseUrl}/functions/v1/resolve-place?key=${encodeURIComponent(key)}&url=`;
+const shortcutPrefix = (key) => `${cfg.supabaseUrl}/functions/v1/resolve-place/${key}/`;
 
 function renderShortcutHelp() {
   const step = (n, t, body) => `<li class="card"><span class="rank">${n}</span><div><h3>${t}</h3>${body}</div></li>`;
@@ -461,10 +461,10 @@ function renderShortcutHelp() {
       ${step(1, "כתובת אישית", `<p>בהגדרות ← ״קיצור דרך לאייפון״ ← <b>יצירת מפתח חדש</b> ← <b>העתקה</b> של הכתובת שמופיעה.</p>`)}
       ${step(2, "קיצור חדש", `<p>ב-<b>Shortcuts</b> לוחצים <b>+</b> ← Rename ← <b>שמור ל-Spots</b>. לוחצים <b>ⓘ</b> ← <b>Show in Share Sheet</b> ← Done.</p>`)}
       ${step(3, "URL Encode", `<p>בחיפוש: <b>URL Encode</b> ← מוסיפים. צריך להופיע: Encode <b>Shortcut Input</b>.</p>`)}
-      ${step(4, "Text", `<p>בחיפוש: <b>Text</b> ← מוסיפים. מדביקים בתוכו את הכתובת משלב 1, ומיד אחריה (בלי רווח) בוחרים מעל המקלדת <b>URL Encoded Text</b>.</p>`)}
+      ${step(4, "Text", `<p>בחיפוש: <b>Text</b> ← מוסיפים. מדביקים בתוכו את הכתובת משלב 1, ומיד אחריה (בלי רווח) בוחרים מעל המקלדת <b>URL Encoded Text</b> (צריך להופיע ככפתור כחול בתוך הטקסט).</p>`)}
       ${step(5, "Get Contents of URL", `<p>בחיפוש: <b>Get Contents of URL</b> ← מוסיפים. היא לוקחת אוטומטית את <b>Text</b>. לא משנים בה כלום.</p>`)}
       ${step(6, "Show Notification", `<p>בחיפוש: <b>Show Notification</b> ← מוסיפים. בתוכן ההודעה בוחרים <b>Contents of URL</b>.</p>`)}
-      ${step(7, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. אחרי כמה שניות: ״Spots: נשמר…״, ״כבר ברשימה״ או ״נשמר בתיבת האישור״.</p>`)}
+      ${step(7, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b> (לא בלחיצה על ▶ בתוך Shortcuts, שם אין קישור). אחרי כמה שניות: ״Spots: נשמר…״, ״כבר ברשימה״ או ״נשמר בתיבת האישור״.</p>`)}
     </ol>`;
 }
 

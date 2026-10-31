@@ -291,15 +291,24 @@ Deno.serve(async (req) => {
 
   // Simple mode for the iPhone Shortcut: GET ?key=<personal key>&url=<link>  →  saves and answers in plain text.
   if (req.method === "GET") {
-    const q = new URL(req.url).searchParams;
+    // Shortcut mode. Accepts /resolve-place/<key>/<url-encoded link> (preferred: no ?, & or = for iOS to mangle)
+    // and the older /resolve-place?key=…&url=… form.
+    const u = new URL(req.url);
     const text = (msg: string, status = 200) => new Response(msg, { status, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" } });
-    const key = q.get("key") || "";
+    const raw = u.pathname + u.search;
+    const m = raw.match(/(spk_[A-Za-z0-9_-]{10,})(.*)$/);
+    const key = m?.[1] || u.searchParams.get("key") || "";
+    let rest = u.searchParams.get("url") || (m?.[2] || "");
+    for (let i = 0; i < 3 && !/https?:\/\//.test(rest); i++) {
+      try { const d = decodeURIComponent(rest); if (d === rest) break; rest = d; } catch { break; }
+    }
     const db = admin();
     const { data: k } = key ? await db.from("shortcut_keys").select("id, owner_email").eq("key_hash", await sha256(key)).eq("revoked", false).maybeSingle() : { data: null };
     if (!k) return text("Spots: המפתח האישי לא תקין. צור מפתח חדש בהגדרות.", 401);
     await db.from("shortcut_keys").update({ last_used_at: new Date().toISOString() }).eq("id", k.id);
-    const url = (q.get("url") || "").trim().match(/https?:\/\/\S+/)?.[0] || "";
-    if (!url) return text("Spots: לא התקבל קישור.", 400);
+    const url = rest.match(/https?:\/\/\S+/)?.[0] || "";
+    console.log("shortcut", { path: u.pathname.slice(0, 40), hasUrl: !!url });
+    if (!url) return text("Spots: לא התקבל קישור. הפעל את הקיצור מתפריט השיתוף (לא מתוך אפליקציית Shortcuts).", 400);
     const r = await processLink({ email: k.owner_email, role: "owner" }, url, "", true);
     return text(`Spots: ${(r.body as { message?: string }).message || "שגיאה"}`, r.code);
   }
