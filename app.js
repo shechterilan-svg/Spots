@@ -458,9 +458,10 @@ function renderShortcutHelp() {
     `<ol class="steps">
       ${step(1, "קיצור חדש", `<p>באפליקציית <b>Shortcuts</b> לוחצים <b>+</b>. מקישים על השם למעלה ← <b>Rename</b> ← <b>שמור ל-Spots</b>.</p>`)}
       ${step(2, "תפריט השיתוף", `<p>לוחצים על <b>ⓘ</b> בשורה התחתונה ← מפעילים <b>Show in Share Sheet</b> ← <b>Done</b>.</p>`)}
-      ${step(3, "פעולה אחת", `<p>בחיפוש למטה כותבים <b>Open URLs</b> ומוסיפים. מקישים על המילה הכחולה <b>URL</b> ומדביקים:</p>${code(prefix)}
-        <p>מיד אחרי הטקסט (בלי רווח), מעל המקלדת בוחרים את המשתנה <b>Shortcut Input</b>. זהו – הקיצור מוכן.</p>`)}
-      ${step(4, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח, מזהה ושומר. אם הזיהוי לא בטוח – המקום נכנס לתיבת האישור.</p>`)}
+      ${step(3, "קידוד הקישור", `<p>בחיפוש למטה כותבים <b>URL Encode</b> ומוסיפים. בפעולה צריך להופיע: Encode <b>Shortcut Input</b>.</p>`)}
+      ${step(4, "פתיחת Spots", `<p>מוסיפים <b>Open URLs</b> (מתחת לפעולה הקודמת). מקישים על המילה הכחולה <b>URL</b> ומדביקים:</p>${code(prefix)}
+        <p>מיד אחרי הטקסט (בלי רווח), מעל המקלדת בוחרים את המשתנה <b>URL Encoded Text</b>. זהו – הקיצור מוכן.</p>`)}
+      ${step(5, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח, מזהה ושומר. אם הזיהוי לא בטוח – המקום נכנס לתיבת האישור.</p>`)}
     </ol>
     <details class="card"><summary>מתקדם: שמירה בלי לפתוח את Spots</summary>
       <p class="status">דורש מפתח אישי (בהגדרות) ופעולת <b>Get Contents of URL</b> עם POST, כותרות <code dir="ltr">x-spots-key</code> ו-<code dir="ltr">apikey</code>, וגוף JSON עם <code dir="ltr">url</code> ו-<code dir="ltr">save=true</code>.</p>
