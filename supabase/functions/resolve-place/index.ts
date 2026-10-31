@@ -53,15 +53,15 @@ async function caller(req: Request): Promise<{ email: string; role: string } | n
 
 // ---------- 1. read the link ----------
 const meta = (html: string, prop: string) => {
-  const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']*)["']`, "i"))
-    || html.match(new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${prop}["']`, "i"));
+  const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content="([^"]*)"`, "i"))
+    || html.match(new RegExp(`<meta[^>]+content="([^"]*)"[^>]*(?:property|name)=["']${prop}["']`, "i"));
   return m ? decodeEntities(m[1]) : "";
 };
 const decodeEntities = (s: string) => s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
   .replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
 async function readLink(url: string) {
-  const out: { platform: string; title: string; caption: string; publisher: string; finalUrl: string; mapsName?: string; lat?: number; lng?: number } =
+  const out: { platform: string; title: string; caption: string; publisher: string; finalUrl: string; via?: string; mapsName?: string; lat?: number; lng?: number } =
     { platform: "web", title: "", caption: "", publisher: "", finalUrl: url };
   try {
     if (/tiktok\.com/i.test(url)) {
@@ -71,6 +71,24 @@ async function readLink(url: string) {
       return out;
     }
     const isIg = /instagram\.com/i.test(url);
+    if (isIg) {
+      out.platform = "instagram";
+      const code = url.match(/instagram\.com\/(?:[\w.]+\/)?(?:p|reel|reels|tv)\/([\w-]+)/i)?.[1];
+      if (code) {
+        try {
+          const er = await fetch(`https://www.instagram.com/p/${code}/embed/captioned/`, {
+            headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1", "Accept-Language": "he,en;q=0.8" },
+          });
+          const eh = await er.text();
+          const block = eh.match(/<div class="Caption"[^>]*>([\s\S]*?)<div class="CaptionComments/i)?.[1] || eh.match(/<div class="Caption"[^>]*>([\s\S]*?)<\/div>/i)?.[1] || "";
+          const user = block.match(/class="CaptionUsername"[^>]*>([^<]+)</i)?.[1] || eh.match(/class="UsernameText"[^>]*>([^<]+)</i)?.[1] || "";
+          const text = decodeEntities(block.replace(/<a[^>]*class="CaptionUsername"[^>]*>[^<]*<\/a>/i, "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")).trim();
+          if (text) { out.caption = text; out.publisher = user.trim(); out.via = "embed"; }
+          console.log("ig embed", er.status, "caption chars", text.length);
+        } catch (e) { console.warn("ig embed failed", e); }
+      }
+      if (out.caption) return out;
+    }
     const r = await fetch(url, {
       redirect: "follow",
       headers: { "User-Agent": isIg ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" : "Mozilla/5.0 (compatible; SpotsBot/1.0)", "Accept-Language": "he,en;q=0.8" },
@@ -83,11 +101,13 @@ async function readLink(url: string) {
       const at = out.finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || out.finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
       if (at) { out.lat = +at[1]; out.lng = +at[2]; }
     }
-    const html = (await r.text()).slice(0, 400_000);
+    const html = (await r.text()).slice(0, 600_000);
     if (isIg) {
       out.platform = "instagram";
       out.title = meta(html, "og:title");
       out.caption = meta(html, "og:description") || meta(html, "description");
+      out.via = out.caption ? "og" : "none";
+      console.log("ig page", r.status, "caption chars", out.caption.length);
       const who = out.title.match(/^(.+?) on Instagram/i) || out.caption.match(/-\s*([\w.]+)\s+on\s/i);
       if (who) out.publisher = who[1];
     } else if (out.platform !== "google_maps") {
@@ -254,7 +274,9 @@ Deno.serve(async (req) => {
   const source = url ? { url, platform: link.platform, publisher: link.publisher || null, caption: (link.caption || link.title || "").slice(0, 500) || null } : null;
   const duplicate = draft.name ? await findDuplicate(draft, url) : null;
 
-  const result = { draft, source, duplicate, confidence: Math.round(confidence * 100) / 100, found_on_google: !!g, ai: !!ai, ai_error: aiError || undefined, maps_url: g?.maps_url };
+  const read = { platform: link.platform, chars: (link.caption || "").length + (link.title || "").length, via: (link as { via?: string }).via || null };
+  console.log("resolve", JSON.stringify({ read, ai: !!ai, is_place: ai?.is_place, name: ai?.name, google: !!g, aiError }));
+  const result = { draft, source, duplicate, confidence: Math.round(confidence * 100) / 100, found_on_google: !!g, ai: !!ai, ai_error: aiError || undefined, maps_url: g?.maps_url, read };
   if (!body.save) return reply(result);
 
   // ---------- save (owner only) ----------

@@ -227,6 +227,7 @@ async function renderAdd() {
       ? `<div class="card notice"><h3>המקום כבר ברשימה</h3><p><a href="#/place/${encodeURIComponent(r.duplicate.id)}">${esc(r.duplicate.name)}</a></p></div>`
       : `<div class="card ${pct >= 70 && r.found_on_google ? "ok-box" : "notice"}"><p><b>${r.draft?.name ? `זוהה: ${esc(r.draft.name)}` : "לא זיהיתי את המקום"}</b></p>
           <p class="status">${esc([`ביטחון ${pct}%`, r.found_on_google ? "נמצא ב-Google עם כתובת ושעות" : "לא נמצא ב-Google", r.source?.publisher ? `מקור: ${r.source.publisher}` : ""].filter(Boolean).join(" · "))}</p>
+          ${!r.draft?.name ? `<p class="status">${esc(r.read && r.read.chars < 20 ? "לא הצלחתי לקרוא את הכיתוב של הפוסט. אפשר למלא את השם ידנית למטה." : r.ai_error ? "שירות הזיהוי לא זמין כרגע. אפשר למלא ידנית." : "בכיתוב לא מוזכר מקום מסוים. אפשר למלא ידנית.")}</p>` : ""}
           ${r.maps_url ? `<p><a href="${esc(r.maps_url)}" target="_blank" rel="noopener">בדיקה בגוגל מפות</a></p>` : ""}
           <p class="status">בדוק את הפרטים למטה ולחץ ״הוספה לרשימה״.</p></div>`;
   }
