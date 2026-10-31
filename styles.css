@@ -154,3 +154,14 @@ body:not(.is-owner) [data-route="inbox"] { visibility:hidden }
 .member small{display:block;color:var(--muted);font-size:13px}
 .inline-form{display:grid;grid-template-columns:1fr;gap:8px;margin-top:12px}
 @media (min-width:600px){.inline-form{grid-template-columns:1fr 1.4fr auto}}
+
+/* ---------- link recognition & shortcut ---------- */
+.ok-box{background:var(--green-soft);border-color:transparent}
+.caption{font-size:14px;color:var(--muted);border-inline-start:3px solid var(--line);padding-inline-start:8px}
+.keybox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.keybox code{flex:1;min-width:0;overflow-wrap:anywhere;background:var(--chip);padding:10px;border-radius:10px;font-size:13px}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:flex;gap:12px;align-items:flex-start}
+.steps li > div{flex:1;min-width:0}
+.steps code{background:var(--chip);padding:1px 6px;border-radius:6px}
+input[type=url],input[type=email],input[type=tel]{direction:ltr;text-align:left}

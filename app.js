@@ -82,6 +82,7 @@ const screens = {
   vote: { title: "הצבעה", render: renderOuting },
   map: { title: "אזור", render: renderArea },
   settings: { title: "הגדרות", render: renderSettings },
+  shortcut: { title: "קיצור דרך", render: renderShortcutHelp, owner: true },
 };
 
 function renderSignIn(msg) {
@@ -218,9 +219,22 @@ const KOSHER = ["לא ידוע", "כשר", "לא כשר"];
 
 async function renderAdd() {
   if (!isOwner()) return renderRecommend();
-  return head("הוספת מקום", "בינתיים הוספה ידנית. הדבקת קישור עם זיהוי אוטומטי מגיעה כשיחוברו המפתחות של Google ו-Claude.") +
-    `<input class="field" type="url" placeholder="הדבקת קישור – בקרוב" aria-label="קישור" disabled>
-     <div style="height:12px"></div>` + (await renderPlaceForm(null));
+  const r = state.addResult;
+  let banner = "";
+  if (r) {
+    const pct = Math.round((r.confidence || 0) * 100);
+    banner = r.duplicate
+      ? `<div class="card notice"><h3>המקום כבר ברשימה</h3><p><a href="#/place/${encodeURIComponent(r.duplicate.id)}">${esc(r.duplicate.name)}</a></p></div>`
+      : `<div class="card ${pct >= 70 && r.found_on_google ? "ok-box" : "notice"}"><p><b>${r.draft?.name ? `זוהה: ${esc(r.draft.name)}` : "לא זיהיתי את המקום"}</b></p>
+          <p class="status">${esc([`ביטחון ${pct}%`, r.found_on_google ? "נמצא ב-Google עם כתובת ושעות" : "לא נמצא ב-Google", r.source?.publisher ? `מקור: ${r.source.publisher}` : ""].filter(Boolean).join(" · "))}</p>
+          ${r.maps_url ? `<p><a href="${esc(r.maps_url)}" target="_blank" rel="noopener">בדיקה בגוגל מפות</a></p>` : ""}
+          <p class="status">בדוק את הפרטים למטה ולחץ ״הוספה לרשימה״.</p></div>`;
+  }
+  return head("הוספת מקום", "מדביקים קישור מאינסטגרם, טיקטוק, גוגל מפות או אתר, ומקבלים טיוטה ממולאת") +
+    `<form id="link-form" class="request"><input class="field" name="url" type="url" inputmode="url" placeholder="הדבק קישור כאן" aria-label="קישור" value="${esc(state.addUrl || "")}" required>
+      <button class="btn" type="submit">זיהוי</button></form><p class="status" id="link-status"></p>` +
+    banner + (await renderPlaceForm(null, r ? { ...r.draft, source_url: r.source?.url || state.addUrl, extra: { source: r.source } } : null)) +
+    `<p class="status"><a href="#/shortcut">שמירה ישר מתפריט השיתוף באייפון →</a></p>`;
 }
 
 async function renderPlaceForm(id, prefill = null) {
@@ -232,7 +246,8 @@ async function renderPlaceForm(id, prefill = null) {
   const select = (name, label, list, val) =>
     `<label class="lbl">${label}<select class="field" name="${name}">${uniq([...list, val]).map((v) => `<option ${v === val ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
   return `${isNew ? "" : `<a class="back" href="#/place/${encodeURIComponent(p.id)}">→ ביטול</a>${head(`עריכת ${p.name}`)}`}
-  <form id="place-form" class="card form" data-id="${esc(p.id || "")}" data-suggestion="${esc(prefill?.suggestionId || "")}">
+  <form id="place-form" class="card form" data-id="${esc(p.id || "")}" data-suggestion="${esc(prefill?.suggestionId || "")}"
+    data-extra="${esc(isNew ? JSON.stringify({ lat: p.lat ?? null, lng: p.lng ?? null, google_place_id: p.google_place_id || null, hours_source: p.hours_source || null, hours_checked_at: p.hours_checked_at || null, source: p.extra?.source || null }) : "")}">
     ${input("name", "שם *", p.name, "text", "required")}${input("name_en", "שם באנגלית", p.name_en)}
     ${select("type", "סוג", TYPES, p.type)}
     ${input("cuisine", "סגנון (מופרד בפסיקים)", (p.cuisine || []).join(", "))}
@@ -263,7 +278,8 @@ async function renderRecommend() {
     `<form id="recommend-form" class="card form">
       <label class="lbl">שם המקום *<input class="field" name="name" required></label>
       <label class="lbl">עיר<input class="field" name="city"></label>
-      <label class="lbl">קישור (אינסטגרם, גוגל מפות, אתר)<input class="field" name="url" type="url"></label>
+      <label class="lbl">קישור (אינסטגרם, טיקטוק, גוגל מפות, אתר)<input class="field" name="url" type="url" inputmode="url"></label>
+      <button class="btn ghost" type="button" data-action="recommend-fill">מילוי אוטומטי מהקישור</button>
       <label class="lbl">למה כדאי?<textarea class="field" name="note" rows="3"></textarea></label>
       <div class="row"><button class="btn" type="submit">שליחה</button></div><p class="status" id="form-status"></p>
     </form>` +
@@ -277,7 +293,9 @@ async function renderInbox() {
   return head("תיבת אישור", items.length ? `${items.length} ממתינות` : "אין המלצות שממתינות") +
     items.map((s) => `<section class="card">
       <h3 dir="auto">${esc(s.payload?.name || "ללא שם")}</h3>
-      <p class="status">${esc([s.payload?.city, `מאת ${nameOf(s.suggested_by)}`, new Date(s.created_at).toLocaleDateString("he-IL")].filter(Boolean).join(" · "))}</p>
+      <p class="status">${esc([s.payload?.city, s.origin === "share" ? "" : `מאת ${nameOf(s.suggested_by)}`, new Date(s.created_at).toLocaleDateString("he-IL")].filter(Boolean).join(" · "))}</p>
+      ${s.origin === "share" ? `<p class="status">נשמר מהאייפון · ביטחון ${Math.round((s.confidence || 0) * 100)}%${s.payload?.address ? ` · ${esc(s.payload.address)}` : ""}</p>` : ""}
+      ${s.payload?.source?.caption ? `<p class="caption">${esc(s.payload.source.caption.slice(0, 200))}</p>` : ""}
       ${s.payload?.note ? `<p>${esc(s.payload.note)}</p>` : ""}
       ${safeUrl(s.url) ? `<p><a href="${esc(s.url)}" target="_blank" rel="noopener">קישור</a></p>` : ""}
       <div class="row"><button class="btn" data-action="approve" data-id="${esc(s.id)}">אישור והוספה</button>
@@ -406,12 +424,39 @@ async function renderSettings() {
           <button class="btn" type="submit">הזמנה</button></form><p class="status" id="member-status"></p>` : ""}
        ${friends.length ? `<button class="btn ghost" data-action="share-app">שליחת קישור לאפליקציה</button>` : ""}
      </section>` : "") +
+    (isOwner() ? `<section class="card"><h3>קיצור דרך לאייפון</h3>
+      <p class="status">מפתח אישי שמאפשר לשמור מקום ישר מתפריט השיתוף. מוצג פעם אחת בלבד.</p>
+      ${state.newKey ? `<div class="keybox"><code dir="ltr" id="new-key">${esc(state.newKey)}</code>
+        <button class="btn" data-action="copy-key">העתקה</button></div><p class="status">העתק עכשיו והדבק בקיצור הדרך. אחרי שתצא מהמסך לא אפשר יהיה לראות אותו שוב.</p>` : ""}
+      ${(await db.listShortcutKeys().catch(() => [])).filter((k) => !k.revoked).map((k) => `<div class="member"><span><b>${esc(k.label || "מפתח")}</b>
+        <small>נוצר ${new Date(k.created_at).toLocaleDateString("he-IL")}${k.last_used_at ? ` · שימוש אחרון ${new Date(k.last_used_at).toLocaleDateString("he-IL")}` : " · עוד לא בשימוש"}</small></span>
+        <button class="chip" data-action="revoke-key" data-id="${esc(k.id)}">ביטול</button></div>`).join("")}
+      <div class="row"><button class="btn ghost" data-action="new-key">יצירת מפתח חדש</button><a class="btn ghost" href="#/shortcut">איך מגדירים</a></div>
+    </section>` : "") +
     `<section class="card"><h3>מיקום</h3><p class="status">המיקום נשמר רק בטלפון ולא נשלח לשרת.</p>
       <p>${state.loc ? esc(state.loc.source === "gps" ? "המיקום שלך" : `אזור: ${state.loc.label}`) : "לא נקבע"}</p>
       ${state.loc ? `<button class="btn ghost" data-action="clear-loc">איפוס מיקום</button>` : ""}</section>` +
     `<section class="card"><h3>חיבור לשרת</h3><div id="conn" class="status">בודק…</div></section>` +
     (isOwner() ? `<section class="card"><h3>ייצוא</h3><p class="status">כל המקומות כקובץ JSON.</p><button class="btn ghost" data-action="export">ייצוא JSON</button></section>` : "") +
     `<p class="status">גרסה ${esc(cfg.version || "")}</p>`;
+}
+
+// ----- iPhone Shortcut setup (F-03) -----
+function renderShortcutHelp() {
+  const endpoint = `${cfg.supabaseUrl}/functions/v1/resolve-place`;
+  const step = (n, t, body) => `<li class="card"><span class="rank">${n}</span><div><h3>${t}</h3>${body}</div></li>`;
+  const code = (v) => `<div class="keybox"><code dir="ltr">${esc(v)}</code><button class="btn ghost" data-action="copy" data-value="${esc(v)}">העתקה</button></div>`;
+  return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "קיצור דרך פעם אחת, ואחר כך כל ריל או פוסט נשמר בשתי לחיצות") +
+    `<ol class="steps">
+      ${step(1, "מפתח אישי", `<p>בהגדרות → ״קיצור דרך לאייפון״ → ״יצירת מפתח חדש״, והעתק אותו.</p>`)}
+      ${step(2, "קיצור חדש", `<p>באפליקציית <b>קיצורים</b> לוחצים +. בהגדרות הקיצור (סמל ⓘ) מסמנים <b>הצג בגיליון השיתוף</b>, ובסוגי הקלט משאירים רק <b>כתובות URL</b> ו<b>טקסט</b>. שם: <b>שמור ל-Spots</b>.</p>`)}
+      ${step(3, "פעולה: קבלת תוכן מכתובת URL", `<p>מוסיפים את הפעולה <b>קבל תוכן של כתובת URL</b> (Get Contents of URL) עם הכתובת:</p>${code(endpoint)}
+        <p>שיטה: <b>POST</b>. כותרות (Headers):</p>
+        <p><code dir="ltr">x-spots-key</code> = המפתח האישי</p><p><code dir="ltr">apikey</code> =</p>${code(cfg.supabaseAnonKey)}
+        <p>גוף הבקשה: <b>JSON</b>, עם שני שדות: <code dir="ltr">url</code> (טקסט) = <b>קלט קיצור הדרך</b>, ו-<code dir="ltr">save</code> (בוליאני) = <b>אמת</b>.</p>`)}
+      ${step(4, "הודעה", `<p>מוסיפים <b>קבל ערך מילון</b> (Get Dictionary Value) עבור המפתח <code dir="ltr">message</code>, ואחריו <b>הצג התראה</b> עם הערך.</p>`)}
+      ${step(5, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף → שמור ל-Spots</b>. אחרי כמה שניות תופיע הודעה: ״נשמר״, ״כבר ברשימה״ או ״נשמר בתיבת האישור״ כשהזיהוי לא בטוח.</p>`)}
+    </ol>`;
 }
 
 // ---------- router ----------
@@ -468,6 +513,10 @@ async function checkConnection() {
     const r = await fetch(`${cfg.supabaseUrl}/auth/v1/health`, { headers: { apikey: cfg.supabaseAnonKey } });
     el.innerHTML = r.ok ? `<span class="ok">מחובר ל-Supabase ✓</span>` : `שגיאת חיבור (${r.status})`;
   } catch { el.textContent = "אין חיבור לשרת כרגע. מוצגים נתונים שמורים."; }
+}
+
+async function copyText(v) {
+  try { await navigator.clipboard.writeText(v); } catch { prompt("העתק:", v); }
 }
 
 async function shareLink(url, text) {
@@ -529,11 +578,24 @@ document.addEventListener("click", async (e) => {
       }
       case "remove-member": if (confirm(`להסיר את ${t.dataset.email}?`)) { await db.removeMember(t.dataset.email); render(); } break;
       case "reject": await db.decideSuggestion(id, "rejected"); render(); break;
+      case "new-key": state.newKey = await db.createShortcutKey("iPhone"); render(); break;
+      case "revoke-key": if (confirm("לבטל את המפתח? קיצור הדרך שמשתמש בו יפסיק לעבוד.")) { await db.revokeShortcutKey(id); render(); } break;
+      case "copy-key": await copyText(state.newKey); t.textContent = "הועתק ✓"; break;
+      case "copy": await copyText(t.dataset.value); t.textContent = "הועתק ✓"; break;
+      case "recommend-fill": {
+        const f = document.getElementById("recommend-form"), st = document.getElementById("form-status");
+        const url = f.elements.url.value.trim(); if (!url) { st.textContent = "הדבק קישור קודם."; break; }
+        st.textContent = "מזהה…"; t.disabled = true;
+        try { const r = await db.resolveLink(url); if (r.draft?.name) f.elements.name.value = r.draft.name; if (r.draft?.city) f.elements.city.value = r.draft.city;
+          st.textContent = r.duplicate ? `המקום כבר ברשימה: ${r.duplicate.name}` : r.draft?.name ? "מולא אוטומטית. בדוק ושלח." : "לא זיהיתי, אפשר למלא ידנית."; }
+        catch (err) { st.textContent = `הזיהוי נכשל: ${err.message}`; }
+        t.disabled = false; break;
+      }
       case "approve": {
         const s = (await db.listSuggestions("pending")).find((x) => x.id === id);
         if (!s) break;
         view.innerHTML = `<a class="back" href="#/inbox">→ ביטול</a>${head("אישור המלצה", "משלימים פרטים ומוסיפים לרשימה")}` +
-          (await renderPlaceForm(null, { name: s.payload?.name || "", city: s.payload?.city || "", notes: s.payload?.note || "", source_url: s.url || "", suggestionId: s.id }));
+          (await renderPlaceForm(null, { ...(s.origin === "share" ? s.payload : {}), name: s.payload?.name || "", city: s.payload?.city || "", notes: s.payload?.note || s.payload?.notes || "", source_url: s.url || "", suggestionId: s.id, extra: { source: s.payload?.source || null } }));
         window.scrollTo(0, 0);
         break;
       }
@@ -584,6 +646,15 @@ document.addEventListener("submit", async (e) => {
   try {
     if (form.id === "request-form") { state.request = form.elements.request.value; state.offset = 0; render(); return; }
     if (form.id === "place-form") return await submitPlace(form, say);
+    if (form.id === "link-form") {
+      const st = document.getElementById("link-status");
+      state.addUrl = form.elements.url.value.trim();
+      st.textContent = "מזהה את המקום… (עד 15 שניות)";
+      form.querySelector("button").disabled = true;
+      try { state.addResult = await db.resolveLink(state.addUrl); render(); }
+      catch (err) { st.textContent = `הזיהוי נכשל: ${err.message}`; form.querySelector("button").disabled = false; }
+      return;
+    }
     if (form.id === "recommend-form") {
       const f = new FormData(form);
       say("שולח…");
@@ -639,12 +710,18 @@ async function submitPlace(form, say) {
     location.hash = `#/place/${encodeURIComponent(form.dataset.id)}`;
     return;
   }
-  // new place (manual add or approved recommendation); try to place it on the map
+  // new place (manual add, recognised link or approved recommendation)
+  let extra = {}; try { extra = JSON.parse(form.dataset.extra || "{}"); } catch {}
   row.id = db.newPlaceId(row.name, row.name_en);
   row.needs_review = !row.address || !Object.keys(hours).length;
-  if (row.address) { try { const g = await geo.geocode([row.address, row.city].filter(Boolean).join(", ")); row.lat = g.lat; row.lng = g.lng; } catch {} }
+  if (extra.google_place_id) row.google_place_id = extra.google_place_id;
+  if (extra.hours_source && Object.keys(hours).length) { row.hours_source = extra.hours_source; row.hours_checked_at = extra.hours_checked_at; }
+  if (extra.lat != null) { row.lat = extra.lat; row.lng = extra.lng; }
+  else if (row.address) { try { const g = await geo.geocode([row.address, row.city].filter(Boolean).join(", ")); row.lat = g.lat; row.lng = g.lng; } catch {} }
   const srcUrl = nz(f.get("source_url"));
-  const created = await db.createPlace(row, srcUrl ? { url: srcUrl, platform: /instagram/.test(srcUrl) ? "instagram" : /tiktok/.test(srcUrl) ? "tiktok" : "web" } : null);
+  const src = srcUrl ? { url: srcUrl, platform: extra.source?.platform || (/instagram/.test(srcUrl) ? "instagram" : /tiktok/.test(srcUrl) ? "tiktok" : "web"), publisher: extra.source?.publisher || null, caption: extra.source?.caption || null } : null;
+  const created = await db.createPlace(row, src);
+  state.addResult = null; state.addUrl = "";
   if (form.dataset.suggestion) await db.decideSuggestion(form.dataset.suggestion, "approved", created.id);
   await db.loadPlaces({ force: true });
   location.hash = `#/place/${encodeURIComponent(created.id)}`;
@@ -684,6 +761,8 @@ async function boot() {
   }
   window.addEventListener("hashchange", () => {
     if (!state.session) sessionStorage.setItem(RETURN_KEY, location.hash);
+    if (!location.hash.startsWith("#/settings")) state.newKey = null;
+    if (!location.hash.startsWith("#/add")) { state.addResult = null; state.addUrl = ""; }
     render(); window.scrollTo(0, 0);
   });
   render();
