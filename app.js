@@ -440,7 +440,7 @@ async function renderSettings() {
       ${state.loc ? `<button class="btn ghost" data-action="clear-loc">איפוס מיקום</button>` : ""}</section>` +
     `<section class="card"><h3>חיבור לשרת</h3><div id="conn" class="status">בודק…</div></section>` +
     (isOwner() ? `<section class="card"><h3>ייצוא</h3><p class="status">כל המקומות כקובץ JSON.</p><button class="btn ghost" data-action="export">ייצוא JSON</button></section>` : "") +
-    `<p class="status">גרסה ${esc(cfg.version || "")}</p>`;
+    `<p class="status">גרסה ${esc(cfg.version || "")} · <a href="#" onclick="spotsReset();return false">ניקוי מטמון וטעינה מחדש</a></p>`;
 }
 
 // ----- iPhone Shortcut setup (F-03) -----

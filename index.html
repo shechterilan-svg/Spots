@@ -42,6 +42,31 @@
   <a href="#/outings" data-route="outings"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>יציאות</span></a>
 </nav>
 
+<script>
+// Safety net: if something breaks while loading, show the error and a one-tap reset instead of a blank screen.
+(function () {
+  function bar(msg) {
+    if (document.getElementById("fatal")) return;
+    var d = document.createElement("div");
+    d.id = "fatal";
+    d.setAttribute("style", "position:fixed;inset:auto 0 0 0;z-index:99;background:#b3261e;color:#fff;padding:14px 16px calc(14px + env(safe-area-inset-bottom));font:15px/1.4 system-ui;direction:rtl");
+    d.innerHTML = "<b>משהו השתבש בטעינה.</b><div style='font-size:12px;opacity:.85;direction:ltr;text-align:left;margin:6px 0;word-break:break-all'></div>" +
+      "<button style='background:#fff;color:#b3261e;border:0;border-radius:10px;padding:10px 14px;font:inherit;font-weight:700'>ניקוי וטעינה מחדש</button>";
+    d.querySelector("div").textContent = String(msg).slice(0, 300);
+    d.querySelector("button").onclick = window.spotsReset;
+    document.body.appendChild(d);
+  }
+  window.spotsReset = async function () {
+    try { var regs = await navigator.serviceWorker.getRegistrations(); for (var r of regs) await r.unregister(); } catch (e) {}
+    try { var keys = await caches.keys(); for (var k of keys) await caches.delete(k); } catch (e) {}
+    try { localStorage.removeItem("spots.places.v1"); } catch (e) {}
+    location.replace(location.pathname + "?r=" + Date.now() + "#/now");
+  };
+  window.addEventListener("error", function (e) { if (e.message) bar(e.message + (e.filename ? " @ " + e.filename.split("/").pop() + ":" + e.lineno : "")); });
+  window.addEventListener("unhandledrejection", function (e) { bar((e.reason && e.reason.message) || e.reason); });
+  setTimeout(function () { var m = document.getElementById("view"); if (m && !m.children.length) bar("האפליקציה לא נטענה תוך 10 שניות"); }, 10000);
+})();
+</script>
 <script src="config.js"></script>
 <script src="vendor/supabase-2.118.0.js"></script>
 <script type="module" src="app.js"></script>
