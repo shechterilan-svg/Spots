@@ -231,8 +231,9 @@ async function renderAdd() {
           <p class="status">בדוק את הפרטים למטה ולחץ ״הוספה לרשימה״.</p></div>`;
   }
   return head("הוספת מקום", "מדביקים קישור מאינסטגרם, טיקטוק, גוגל מפות או אתר, ומקבלים טיוטה ממולאת") +
-    `<form id="link-form" class="request"><input class="field" name="url" type="url" inputmode="url" placeholder="הדבק קישור כאן" aria-label="קישור" value="${esc(state.addUrl || "")}" required>
-      <button class="btn" type="submit">זיהוי</button></form><p class="status" id="link-status"></p>` +
+    `<button class="btn paste-btn" type="button" data-action="paste-link">📋 הדבקה וזיהוי</button>
+     <form id="link-form" class="request"><input class="field" name="url" type="url" inputmode="url" placeholder="או הדבק כאן קישור" aria-label="קישור" value="${esc(state.addUrl || "")}" required>
+      <button class="btn ghost" type="submit">זיהוי</button></form><p class="status" id="link-status"></p>` +
     banner + (await renderPlaceForm(null, r ? { ...r.draft, source_url: r.source?.url || state.addUrl, extra: { source: r.source } } : null)) +
     `<p class="status"><a href="#/shortcut">שמירה ישר מתפריט השיתוף באייפון →</a></p>`;
 }
@@ -515,6 +516,26 @@ async function checkConnection() {
   } catch { el.textContent = "אין חיבור לשרת כרגע. מוצגים נתונים שמורים."; }
 }
 
+// Paste-and-recognise: one tap. Also used when a link is pasted or typed into the field.
+let recognizing = false;
+async function recognize(raw) {
+  const url = String(raw || "").match(/https?:\/\/\S+/)?.[0];
+  const st = document.getElementById("link-status");
+  if (!url) { if (st) st.textContent = "לא מצאתי קישור. העתק קישור (שיתוף → העתקת קישור) ונסה שוב."; return; }
+  if (recognizing) return;
+  recognizing = true;
+  state.addUrl = url;
+  const f = document.getElementById("link-form"); if (f) f.elements.url.value = url;
+  document.querySelectorAll('[data-action="paste-link"], #link-form button').forEach((b) => (b.disabled = true));
+  if (st) st.textContent = "מזהה את המקום… (עד 15 שניות)";
+  try { state.addResult = await db.resolveLink(url); recognizing = false; render(); }
+  catch (err) {
+    recognizing = false;
+    if (st) st.textContent = `הזיהוי נכשל: ${err.message}`;
+    document.querySelectorAll('[data-action="paste-link"], #link-form button').forEach((b) => (b.disabled = false));
+  }
+}
+
 async function copyText(v) {
   try { await navigator.clipboard.writeText(v); } catch { prompt("העתק:", v); }
 }
@@ -578,6 +599,12 @@ document.addEventListener("click", async (e) => {
       }
       case "remove-member": if (confirm(`להסיר את ${t.dataset.email}?`)) { await db.removeMember(t.dataset.email); render(); } break;
       case "reject": await db.decideSuggestion(id, "rejected"); render(); break;
+      case "paste-link": {
+        let text = "";
+        try { text = await navigator.clipboard.readText(); }
+        catch { const i = document.querySelector("#link-form [name=url]"); i?.focus(); document.getElementById("link-status").textContent = "אין גישה ללוח. הדבק בשדה למטה, והזיהוי יתחיל לבד."; break; }
+        await recognize(text); break;
+      }
       case "new-key": state.newKey = await db.createShortcutKey("iPhone"); render(); break;
       case "revoke-key": if (confirm("לבטל את המפתח? קיצור הדרך שמשתמש בו יפסיק לעבוד.")) { await db.revokeShortcutKey(id); render(); } break;
       case "copy-key": await copyText(state.newKey); t.textContent = "הועתק ✓"; break;
@@ -626,6 +653,9 @@ document.addEventListener("change", async (e) => {
 });
 
 document.addEventListener("input", (e) => {
+  if (e.target.closest("#link-form") && e.target.name === "url" && /^https?:\/\/\S+\.\S+/.test(e.target.value.trim())) {
+    clearTimeout(state.linkTimer); state.linkTimer = setTimeout(() => recognize(e.target.value), 400);
+  }
   if (e.target.id === "q") {
     state.filters.q = e.target.value;
     const results = applyFilters(db.cachedPlaces() || []);
@@ -646,15 +676,7 @@ document.addEventListener("submit", async (e) => {
   try {
     if (form.id === "request-form") { state.request = form.elements.request.value; state.offset = 0; render(); return; }
     if (form.id === "place-form") return await submitPlace(form, say);
-    if (form.id === "link-form") {
-      const st = document.getElementById("link-status");
-      state.addUrl = form.elements.url.value.trim();
-      st.textContent = "מזהה את המקום… (עד 15 שניות)";
-      form.querySelector("button").disabled = true;
-      try { state.addResult = await db.resolveLink(state.addUrl); render(); }
-      catch (err) { st.textContent = `הזיהוי נכשל: ${err.message}`; form.querySelector("button").disabled = false; }
-      return;
-    }
+    if (form.id === "link-form") return recognize(form.elements.url.value);
     if (form.id === "recommend-form") {
       const f = new FormData(form);
       say("שולח…");

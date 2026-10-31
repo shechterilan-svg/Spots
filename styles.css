@@ -165,3 +165,4 @@ body:not(.is-owner) [data-route="inbox"] { visibility:hidden }
 .steps li > div{flex:1;min-width:0}
 .steps code{background:var(--chip);padding:1px 6px;border-radius:6px}
 input[type=url],input[type=email],input[type=tel]{direction:ltr;text-align:left}
+.paste-btn{width:100%;min-height:56px;font-size:18px;margin-bottom:10px}
