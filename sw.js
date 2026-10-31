@@ -1,8 +1,8 @@
 // Spots service worker: precache the app shell; network-first for code so updates show up immediately,
 // cache fallback when offline. API calls (Supabase) are never cached here – the app keeps its own data cache.
-const VERSION = "spots-v0.2.1";
+const VERSION = "spots-v0.3.0";
 const SHELL = [
-  "./", "index.html", "styles.css", "app.js", "config.js", "lib/db.js", "lib/hours.js",
+  "./", "index.html", "styles.css", "app.js", "config.js", "lib/db.js", "lib/hours.js", "lib/geo.js", "lib/suggest.js",
   "vendor/supabase-2.118.0.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png",
 ];
 
