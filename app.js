@@ -517,6 +517,25 @@ async function checkConnection() {
   } catch { el.textContent = "אין חיבור לשרת כרגע. מוצגים נתונים שמורים."; }
 }
 
+// iOS puts a copied link on the clipboard as a URL item (text/uri-list), which readText() can miss –
+// so read every item and take the first type that holds a link.
+async function readClipboardLink() {
+  const pick = (t) => (String(t || "").match(/https?:\/\/\S+/) || [""])[0];
+  if (navigator.clipboard?.read) {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        for (const type of ["text/uri-list", "text/plain", ...item.types]) {
+          if (!item.types.includes(type)) continue;
+          const v = pick(await (await item.getType(type)).text());
+          if (v) return v;
+        }
+      }
+    } catch (e) { console.warn("clipboard.read", e); }
+  }
+  try { return pick(await navigator.clipboard.readText()); } catch (e) { console.warn("readText", e); }
+  return "";
+}
+
 // Paste-and-recognise: one tap. Also used when a link is pasted or typed into the field.
 let recognizing = false;
 async function recognize(raw) {
@@ -601,10 +620,11 @@ document.addEventListener("click", async (e) => {
       case "remove-member": if (confirm(`להסיר את ${t.dataset.email}?`)) { await db.removeMember(t.dataset.email); render(); } break;
       case "reject": await db.decideSuggestion(id, "rejected"); render(); break;
       case "paste-link": {
-        let text = "";
-        try { text = await navigator.clipboard.readText(); }
-        catch { const i = document.querySelector("#link-form [name=url]"); i?.focus(); document.getElementById("link-status").textContent = "אין גישה ללוח. הדבק בשדה למטה, והזיהוי יתחיל לבד."; break; }
-        await recognize(text); break;
+        const text = await readClipboardLink();
+        if (text) { await recognize(text); break; }
+        const i = document.querySelector("#link-form [name=url]"); i?.focus();
+        document.getElementById("link-status").textContent = "לא הצלחתי לקרוא את הלוח. לחיצה ארוכה על השדה ← הדבקה, והזיהוי יתחיל לבד.";
+        break;
       }
       case "new-key": state.newKey = await db.createShortcutKey("iPhone"); render(); break;
       case "revoke-key": if (confirm("לבטל את המפתח? קיצור הדרך שמשתמש בו יפסיק לעבוד.")) { await db.revokeShortcutKey(id); render(); } break;
