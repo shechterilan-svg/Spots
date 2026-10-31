@@ -222,7 +222,8 @@ async function renderAdd(arg) {
   const incoming = (String(arg || "").match(/https?:\/\/\S+/) || [""])[0] || (String(arg || "").match(/https?:\/[^/]\S+/) || [""])[0].replace(/^(https?:)\//, "$1//");
   if (incoming && incoming !== state.handledIncoming) {
     state.handledIncoming = incoming;
-    setTimeout(() => recognize(incoming), 0);
+    setTimeout(() => saveIncoming(incoming), 0);
+    return head("שומר את המקום…", "מזהה את המקום מהקישור ושומר לרשימה (עד 15 שניות)") + `<div class="card"><div class="skeleton w80"></div><div class="skeleton w60"></div></div>`;
   }
   const r = state.addResult;
   let banner = "";
@@ -459,7 +460,7 @@ function renderShortcutHelp() {
       ${step(2, "תפריט השיתוף", `<p>לוחצים על <b>ⓘ</b> בשורה התחתונה ← מפעילים <b>Show in Share Sheet</b> ← <b>Done</b>.</p>`)}
       ${step(3, "פעולה אחת", `<p>בחיפוש למטה כותבים <b>Open URLs</b> ומוסיפים. מקישים על המילה הכחולה <b>URL</b> ומדביקים:</p>${code(prefix)}
         <p>מיד אחרי הטקסט (בלי רווח), מעל המקלדת בוחרים את המשתנה <b>Shortcut Input</b>. זהו – הקיצור מוכן.</p>`)}
-      ${step(4, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח ומזהה את המקום, ואתה לוחץ ״הוספה לרשימה״.</p>`)}
+      ${step(4, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח, מזהה ושומר. אם הזיהוי לא בטוח – המקום נכנס לתיבת האישור.</p>`)}
     </ol>
     <details class="card"><summary>מתקדם: שמירה בלי לפתוח את Spots</summary>
       <p class="status">דורש מפתח אישי (בהגדרות) ופעולת <b>Get Contents of URL</b> עם POST, כותרות <code dir="ltr">x-spots-key</code> ו-<code dir="ltr">apikey</code>, וגוף JSON עם <code dir="ltr">url</code> ו-<code dir="ltr">save=true</code>.</p>
@@ -565,6 +566,28 @@ async function recognize(raw) {
     if (st) st.textContent = `הזיהוי נכשל: ${err.message}`;
     document.querySelectorAll('[data-action="paste-link"], #link-form button').forEach((b) => (b.disabled = false));
   }
+}
+
+// From the share sheet: recognise and save in one go; uncertain matches go to the inbox.
+async function saveIncoming(url) {
+  try {
+    const r = await db.resolveLink(url, { save: true });
+    await db.loadPlaces({ force: true });
+    if (r.status === "saved" && r.place) { toast(`נשמר: ${r.place.name}`); location.replace(`#/place/${encodeURIComponent(r.place.id)}`); }
+    else if (r.status === "duplicate" && r.duplicate) { toast(`כבר ברשימה: ${r.duplicate.name}`); location.replace(`#/place/${encodeURIComponent(r.duplicate.id)}`); }
+    else if (r.status === "inbox") { toast(r.message || "נשמר בתיבת האישור"); location.replace("#/inbox"); }
+    else { toast(r.message || "השמירה לא הצליחה"); state.addUrl = url; location.replace("#/add"); }
+  } catch (err) {
+    toast(`השמירה נכשלה: ${err.message}`);
+    state.addUrl = url; location.replace("#/add");
+  }
+}
+
+function toast(msg) {
+  let t = document.getElementById("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 4000);
 }
 
 async function copyText(v) {
@@ -813,6 +836,12 @@ async function boot() {
     if (location.search.includes("code=")) { sessionStorage.removeItem(RETURN_KEY); history.replaceState(null, "", location.pathname + location.hash); }
     if (!state.session) sessionStorage.setItem(RETURN_KEY, location.hash);
   }
+  const refreshData = async () => {
+    if (!state.member) return;
+    try { await db.loadPlaces({ force: true }); if (["now", "list", "place", "map"].includes(parse().name)) { const y = window.scrollY; await render(); window.scrollTo(0, y); } } catch {}
+  };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshData(); });
+  setTimeout(refreshData, 0);
   window.addEventListener("hashchange", () => {
     if (!state.session) sessionStorage.setItem(RETURN_KEY, location.hash);
     if (!location.hash.startsWith("#/settings")) state.newKey = null;
