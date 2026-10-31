@@ -451,7 +451,7 @@ async function renderSettings() {
 
 // ----- iPhone Shortcut setup (F-03) -----
 function renderShortcutHelp() {
-  const prefix = appUrl("#/add/");
+  const prefix = `${location.origin}${location.pathname}?add=`;
   const step = (n, t, body) => `<li class="card"><span class="rank">${n}</span><div><h3>${t}</h3>${body}</div></li>`;
   const code = (v) => `<div class="keybox"><code dir="ltr">${esc(v)}</code><button class="btn ghost" data-action="copy" data-value="${esc(v)}">העתקה</button></div>`;
   return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "קיצור דרך עם פעולה אחת: פותח את Spots עם הקישור, ו-Spots מזהה את המקום") +
@@ -529,7 +529,8 @@ async function checkConnection() {
 // iOS puts a copied link on the clipboard as a URL item (text/uri-list), which readText() can miss –
 // so read every item and take the first type that holds a link.
 async function readClipboardLink() {
-  const pick = (t) => (String(t || "").match(/https?:\/\/\S+/) || [""])[0];
+  readClipboardLink.sawOwn = false;
+  const pick = (t) => { const all = String(t || "").match(/https?:\/\/\S+/g) || []; if (all.some(isOwnLink)) readClipboardLink.sawOwn = true; return all.find((u) => !isOwnLink(u)) || ""; };
   if (navigator.clipboard?.read) {
     try {
       for (const item of await navigator.clipboard.read()) {
@@ -545,12 +546,15 @@ async function readClipboardLink() {
   return "";
 }
 
+const isOwnLink = (u) => /shechterilan-svg\.github\.io\/spots/i.test(u) || u.startsWith(location.origin + location.pathname);
+
 // Paste-and-recognise: one tap. Also used when a link is pasted or typed into the field.
 let recognizing = false;
 async function recognize(raw) {
-  const url = String(raw || "").match(/https?:\/\/\S+/)?.[0];
+  const all = String(raw || "").match(/https?:\/\/\S+/g) || [];
+  const url = all.find((u) => !isOwnLink(u));
   const st = document.getElementById("link-status");
-  if (!url) { if (st) st.textContent = "לא מצאתי קישור. העתק קישור (שיתוף → העתקת קישור) ונסה שוב."; return; }
+  if (!url) { if (st) st.textContent = all.length ? "בלוח יש קישור ל-Spots עצמו. העתק קישור מאינסטגרם (שיתוף → העתקת קישור) ונסה שוב." : "לא מצאתי קישור. העתק קישור (שיתוף → העתקת קישור) ונסה שוב."; return; }
   if (recognizing) return;
   recognizing = true;
   state.addUrl = url;
@@ -658,7 +662,9 @@ document.addEventListener("click", async (e) => {
         const text = await readClipboardLink();
         if (text) { await recognize(text); break; }
         const i = document.querySelector("#link-form [name=url]"); i?.focus();
-        document.getElementById("link-status").textContent = "לא הצלחתי לקרוא את הלוח. לחיצה ארוכה על השדה ← הדבקה, והזיהוי יתחיל לבד.";
+        document.getElementById("link-status").textContent = readClipboardLink.sawOwn
+          ? "בלוח יש קישור ל-Spots עצמו. באינסטגרם: שיתוף → העתקת קישור, ואז שוב ״הדבקה וזיהוי״."
+          : "לא הצלחתי לקרוא את הלוח. לחיצה ארוכה על השדה ← הדבקה, והזיהוי יתחיל לבד.";
         break;
       }
       case "new-key": state.newKey = await db.createShortcutKey("iPhone"); render(); break;
@@ -820,6 +826,9 @@ async function boot() {
     const back = sessionStorage.getItem(RETURN_KEY);
     if (back) history.replaceState(null, "", location.pathname + location.search + back);
   }
+  // Shortcut entry: …/Spots/?add=<encoded link>  →  #/add/<link>
+  const addParam = new URLSearchParams(location.search).get("add");
+  if (addParam) history.replaceState(null, "", location.pathname + "#/add/" + encodeURIComponent(addParam));
   if (!location.hash) history.replaceState(null, "", location.pathname + location.search + "#/now");
   if (db.configured) {
     try {

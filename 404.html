@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>Spots</title>
+<script>
+// GitHub Pages fallback: links like /Spots/%23/add/… (an encoded "#") end up here – send them to the app.
+(function () {
+  var p = decodeURIComponent(location.pathname + location.search + location.hash);
+  var i = p.toLowerCase().indexOf("/spots/");
+  var rest = i >= 0 ? p.slice(i + 7) : "";
+  var hash = rest.charAt(0) === "#" ? rest : rest ? "#/" + rest.replace(/^\/+/, "") : "";
+  location.replace("/Spots/" + hash);
+})();
+</script>

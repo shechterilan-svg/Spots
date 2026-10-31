@@ -5,5 +5,5 @@
 window.SPOTS_CONFIG = {
   supabaseUrl: "https://jlidzxqakypfmbdidyhp.supabase.co",      // e.g. https://abcd1234.supabase.co
   supabaseAnonKey: "sb_publishable_tQz3BgHJmmYab0uUm07JYw_iD7wvftX",  // Project Settings → API → anon / publishable key
-  version: "0.4.7"
+  version: "0.4.8"
 };
