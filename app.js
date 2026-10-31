@@ -434,8 +434,10 @@ async function renderSettings() {
      </section>` : "") +
     (isOwner() ? `<section class="card"><h3>קיצור דרך לאייפון</h3>
       <p class="status">מפתח אישי שמאפשר לשמור מקום ישר מתפריט השיתוף. מוצג פעם אחת בלבד.</p>
-      ${state.newKey ? `<div class="keybox"><code dir="ltr" id="new-key">${esc(state.newKey)}</code>
-        <button class="btn" data-action="copy-key">העתקה</button></div><p class="status">העתק עכשיו והדבק בקיצור הדרך. אחרי שתצא מהמסך לא אפשר יהיה לראות אותו שוב.</p>` : ""}
+      ${state.newKey ? `<p><b>הכתובת לקיצור הדרך</b> (כוללת את המפתח):</p>
+        <div class="keybox"><code dir="ltr" id="new-key-url">${esc(shortcutPrefix(state.newKey))}</code>
+        <button class="btn" data-action="copy" data-value="${esc(shortcutPrefix(state.newKey))}">העתקה</button></div>
+        <p class="status">העתק עכשיו והדבק בפעולת Text בקיצור. אחרי שתצא מהמסך לא אפשר יהיה לראות אותה שוב. <span class="sr" id="new-key">${esc(state.newKey)}</span></p>` : ""}
       ${(await db.listShortcutKeys().catch(() => [])).filter((k) => !k.revoked).map((k) => `<div class="member"><span><b>${esc(k.label || "מפתח")}</b>
         <small>נוצר ${new Date(k.created_at).toLocaleDateString("he-IL")}${k.last_used_at ? ` · שימוש אחרון ${new Date(k.last_used_at).toLocaleDateString("he-IL")}` : " · עוד לא בשימוש"}</small></span>
         <button class="chip" data-action="revoke-key" data-id="${esc(k.id)}">ביטול</button></div>`).join("")}
@@ -450,22 +452,20 @@ async function renderSettings() {
 }
 
 // ----- iPhone Shortcut setup (F-03) -----
+const shortcutPrefix = (key) => `${cfg.supabaseUrl}/functions/v1/resolve-place?key=${encodeURIComponent(key)}&url=`;
+
 function renderShortcutHelp() {
-  const prefix = `${location.origin}${location.pathname}?add=`;
   const step = (n, t, body) => `<li class="card"><span class="rank">${n}</span><div><h3>${t}</h3>${body}</div></li>`;
-  const code = (v) => `<div class="keybox"><code dir="ltr">${esc(v)}</code><button class="btn ghost" data-action="copy" data-value="${esc(v)}">העתקה</button></div>`;
-  return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "קיצור דרך עם פעולה אחת: פותח את Spots עם הקישור, ו-Spots מזהה את המקום") +
+  return `<a class="back" href="#/settings">→ הגדרות</a>` + head("שמירה מתפריט השיתוף", "שיתוף ← ״שמור ל-Spots״ ← הודעת ״נשמר״. בלי לפתוח דפדפן.") +
     `<ol class="steps">
-      ${step(1, "קיצור חדש", `<p>באפליקציית <b>Shortcuts</b> לוחצים <b>+</b>. מקישים על השם למעלה ← <b>Rename</b> ← <b>שמור ל-Spots</b>.</p>`)}
-      ${step(2, "תפריט השיתוף", `<p>לוחצים על <b>ⓘ</b> בשורה התחתונה ← מפעילים <b>Show in Share Sheet</b> ← <b>Done</b>.</p>`)}
-      ${step(3, "קידוד הקישור", `<p>בחיפוש למטה כותבים <b>URL Encode</b> ומוסיפים. בפעולה צריך להופיע: Encode <b>Shortcut Input</b>.</p>`)}
-      ${step(4, "פתיחת Spots", `<p>מוסיפים <b>Open URLs</b> (מתחת לפעולה הקודמת). מקישים על המילה הכחולה <b>URL</b> ומדביקים:</p>${code(prefix)}
-        <p>מיד אחרי הטקסט (בלי רווח), מעל המקלדת בוחרים את המשתנה <b>URL Encoded Text</b>. זהו – הקיצור מוכן.</p>`)}
-      ${step(5, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. Spots נפתח, מזהה ושומר. אם הזיהוי לא בטוח – המקום נכנס לתיבת האישור.</p>`)}
-    </ol>
-    <details class="card"><summary>מתקדם: שמירה בלי לפתוח את Spots</summary>
-      <p class="status">דורש מפתח אישי (בהגדרות) ופעולת <b>Get Contents of URL</b> עם POST, כותרות <code dir="ltr">x-spots-key</code> ו-<code dir="ltr">apikey</code>, וגוף JSON עם <code dir="ltr">url</code> ו-<code dir="ltr">save=true</code>.</p>
-      ${code(`${cfg.supabaseUrl}/functions/v1/resolve-place`)}${code(cfg.supabaseAnonKey)}</details>`;
+      ${step(1, "כתובת אישית", `<p>בהגדרות ← ״קיצור דרך לאייפון״ ← <b>יצירת מפתח חדש</b> ← <b>העתקה</b> של הכתובת שמופיעה.</p>`)}
+      ${step(2, "קיצור חדש", `<p>ב-<b>Shortcuts</b> לוחצים <b>+</b> ← Rename ← <b>שמור ל-Spots</b>. לוחצים <b>ⓘ</b> ← <b>Show in Share Sheet</b> ← Done.</p>`)}
+      ${step(3, "URL Encode", `<p>בחיפוש: <b>URL Encode</b> ← מוסיפים. צריך להופיע: Encode <b>Shortcut Input</b>.</p>`)}
+      ${step(4, "Text", `<p>בחיפוש: <b>Text</b> ← מוסיפים. מדביקים בתוכו את הכתובת משלב 1, ומיד אחריה (בלי רווח) בוחרים מעל המקלדת <b>URL Encoded Text</b>.</p>`)}
+      ${step(5, "Get Contents of URL", `<p>בחיפוש: <b>Get Contents of URL</b> ← מוסיפים. היא לוקחת אוטומטית את <b>Text</b>. לא משנים בה כלום.</p>`)}
+      ${step(6, "Show Notification", `<p>בחיפוש: <b>Show Notification</b> ← מוסיפים. בתוכן ההודעה בוחרים <b>Contents of URL</b>.</p>`)}
+      ${step(7, "שימוש", `<p>באינסטגרם, טיקטוק או גוגל מפות: <b>שיתוף ← שמור ל-Spots</b>. אחרי כמה שניות: ״Spots: נשמר…״, ״כבר ברשימה״ או ״נשמר בתיבת האישור״.</p>`)}
+    </ol>`;
 }
 
 // ---------- router ----------

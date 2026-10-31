@@ -19,7 +19,7 @@ const TYPES = ["מסעדה", "בית קפה", "בר", "מאפייה", "אוכל 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-spots-key",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json; charset=utf-8" } });
@@ -229,19 +229,9 @@ function slugId(nameEn: string | null, name: string) {
   return `${base || "place"}-${crypto.randomUUID().slice(0, 5)}`;
 }
 
-// ---------- main ----------
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (req.method !== "POST") return reply({ error: "POST only" }, 405);
-  const who = await caller(req);
-  if (!who) return reply({ error: "unauthorized", message: "אין הרשאה. בדוק את המפתח האישי או התחבר מחדש." }, 401);
-
-  let body: { url?: string; text?: string; save?: boolean };
-  try { body = await req.json(); } catch { return reply({ error: "bad json" }, 400); }
-  const url = (body.url || "").trim().match(/https?:\/\/\S+/)?.[0] || "";
-  const extraText = (body.text || "").slice(0, 1000);
-  if (!url && !extraText) return reply({ error: "missing url" }, 400);
-
+// ---------- pipeline ----------
+type Who = { email: string; role: string };
+async function processLink(who: Who, url: string, extraText: string, save: boolean) {
   const link = url ? await readLink(url) : { platform: "text", title: "", caption: extraText, publisher: "", finalUrl: "" };
   let ai = null, aiError = "";
   try { ai = await extract(link, extraText); } catch (e) { aiError = String(e).slice(0, 200); }
@@ -275,22 +265,54 @@ Deno.serve(async (req) => {
   const duplicate = draft.name ? await findDuplicate(draft, url) : null;
 
   const read = { platform: link.platform, chars: (link.caption || "").length + (link.title || "").length, via: (link as { via?: string }).via || null };
-  console.log("resolve", JSON.stringify({ read, ai: !!ai, is_place: ai?.is_place, name: ai?.name, google: !!g, aiError }));
+  console.log("resolve", JSON.stringify({ read, save, ai: !!ai, is_place: ai?.is_place, name: ai?.name, google: !!g, conf: confidence, aiError }));
   const result = { draft, source, duplicate, confidence: Math.round(confidence * 100) / 100, found_on_google: !!g, ai: !!ai, ai_error: aiError || undefined, maps_url: g?.maps_url, read };
-  if (!body.save) return reply(result);
+  if (!save) return { code: 200, body: result as Record<string, unknown> };
 
   // ---------- save (owner only) ----------
-  if (who.role !== "owner") return reply({ error: "forbidden" }, 403);
+  if (who.role !== "owner") return { code: 403, body: { error: "forbidden", message: "רק הבעלים יכול לשמור." } };
   const db = admin();
-  if (duplicate) return reply({ ...result, status: "duplicate", message: `כבר ברשימה: ${duplicate.name}` });
+  if (duplicate) return { code: 200, body: { ...result, status: "duplicate", message: `כבר ברשימה: ${duplicate.name}` } };
   if (draft.name && g && confidence >= 0.7) {
     const row = { ...draft, id: slugId(draft.name_en, draft.name) } as Record<string, unknown>;
     const { data, error } = await db.from("places").insert(row).select("id,name,address,city").single();
-    if (error) return reply({ ...result, status: "error", message: error.message }, 500);
+    if (error) return { code: 500, body: { ...result, status: "error", message: error.message } };
     if (source) await db.from("sources").insert({ ...source, place_id: data.id });
-    return reply({ ...result, status: "saved", place: data, message: `נשמר: ${data.name}${data.address ? `, ${data.address}` : ""}${data.city ? `, ${data.city}` : ""}` });
+    return { code: 200, body: { ...result, status: "saved", place: data, message: `נשמר: ${data.name}${data.address ? `, ${data.address}` : ""}${data.city ? `, ${data.city}` : ""}` } };
   }
   const { error } = await db.from("suggestions").insert({ origin: "share", suggested_by: who.email, url: url || null, payload: { ...draft, note: extraText || null, source }, confidence });
-  if (error) return reply({ ...result, status: "error", message: error.message }, 500);
-  return reply({ ...result, status: "inbox", message: draft.name ? `לא בטוח שזה ${draft.name} – נשמר בתיבת האישור` : "לא זיהיתי את המקום – נשמר בתיבת האישור" });
+  if (error) return { code: 500, body: { ...result, status: "error", message: error.message } };
+  return { code: 200, body: { ...result, status: "inbox", message: draft.name ? `לא בטוח שזה ${draft.name} – נשמר בתיבת האישור` : "לא זיהיתי את המקום – נשמר בתיבת האישור" } };
+}
+
+// ---------- main ----------
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+
+  // Simple mode for the iPhone Shortcut: GET ?key=<personal key>&url=<link>  →  saves and answers in plain text.
+  if (req.method === "GET") {
+    const q = new URL(req.url).searchParams;
+    const text = (msg: string, status = 200) => new Response(msg, { status, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" } });
+    const key = q.get("key") || "";
+    const db = admin();
+    const { data: k } = key ? await db.from("shortcut_keys").select("id, owner_email").eq("key_hash", await sha256(key)).eq("revoked", false).maybeSingle() : { data: null };
+    if (!k) return text("Spots: המפתח האישי לא תקין. צור מפתח חדש בהגדרות.", 401);
+    await db.from("shortcut_keys").update({ last_used_at: new Date().toISOString() }).eq("id", k.id);
+    const url = (q.get("url") || "").trim().match(/https?:\/\/\S+/)?.[0] || "";
+    if (!url) return text("Spots: לא התקבל קישור.", 400);
+    const r = await processLink({ email: k.owner_email, role: "owner" }, url, "", true);
+    return text(`Spots: ${(r.body as { message?: string }).message || "שגיאה"}`, r.code);
+  }
+
+  if (req.method !== "POST") return reply({ error: "POST only" }, 405);
+  const who = await caller(req);
+  if (!who) return reply({ error: "unauthorized", message: "אין הרשאה. בדוק את המפתח האישי או התחבר מחדש." }, 401);
+
+  let body: { url?: string; text?: string; save?: boolean };
+  try { body = await req.json(); } catch { return reply({ error: "bad json" }, 400); }
+  const url = (body.url || "").trim().match(/https?:\/\/\S+/)?.[0] || "";
+  const extraText = (body.text || "").slice(0, 1000);
+  if (!url && !extraText) return reply({ error: "missing url" }, 400);
+  const r = await processLink(who, url, extraText, !!body.save);
+  return reply(r.body, r.code);
 });
